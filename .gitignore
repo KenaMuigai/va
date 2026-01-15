@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+*.sqlite3
+
+# VS Code
+.vscode/
+
+# Virtual environment
+nlsenv/
