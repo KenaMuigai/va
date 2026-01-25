@@ -1,30 +1,88 @@
-from ASR import listen_once
 from llm import LLM
+from weatherAPI import WeatherAPI
+from CalendarAPI import CalendarAPI
+from ASR import listen_once
 from TTS import text_to_speech_stream
 
-def main():
-    print("🎙️ Voice Assistant Started (Ctrl+C to stop)")
+import threading
 
-    llm = LLM()
 
+# Initialize modules
+llm = LLM()
+weather_api = WeatherAPI()
+calendar_api = CalendarAPI()
+
+
+def is_weather_query(text: str) -> bool:
+    text = text.lower()
+    return any(k in text for k in ["weather", "forecast", "temperature", "rain", "sunny"])
+
+
+def is_calendar_query(text: str) -> bool:
+    text = text.lower()
+    return any(k in text for k in ["calendar", "event", "schedule", "reminder", "meeting"])
+
+
+def handle_weather(text: str) -> str:
+    place = llm.facts.get("location", "Marburg")  # fallback
+    return weather_api.get_forecast_text(place)
+
+
+def handle_calendar(text: str) -> str:
+    text = text.lower()
+
+    if "list" in text or "show" in text:
+        events = calendar_api.list_events()
+        return calendar_api.events_to_text(events)
+
+    if "delete" in text:
+        import re
+        match = re.search(r"delete event (\d+)", text)
+        if match:
+            event_id = int(match.group(1))
+            calendar_api.delete_event(event_id)
+            return f"Event {event_id} deleted."
+        return "Tell me the event ID to delete, like 'delete event 12'."
+
+    if "create" in text or "add" in text:
+        return "To create an event, please provide: title, start_time, end_time, location."
+
+    return "I can help with calendar events. Ask me to list, create or delete events."
+
+
+def run_voice_assistant():
+    print("Voice assistant running. Say something... (or type 'exit')")
     while True:
+        print("\nListening...")
         try:
-            print("\nListening...")
             user_text = listen_once()
-            print("🧑 You:", user_text)
+        except Exception as e:
+            print("ASR error:", e)
+            continue
 
-            response = llm.generate(user_text)
-            print("🤖 Assistant:", response)
-
-            text_to_speech_stream(response)
-
-        except KeyboardInterrupt:
-            print("\n🛑 Assistant stopped.")
+        if user_text.lower() in {"exit", "quit"}:
             break
 
+        print("You said:", user_text)
+
+        if user_text.lower() == "/reset":
+            llm.reset_memory()
+            reply = "Memory cleared."
+        elif is_weather_query(user_text):
+            reply = handle_weather(user_text)
+        elif is_calendar_query(user_text):
+            reply = handle_calendar(user_text)
+        else:
+            reply = llm.generate(user_text)
+
+        print("Assistant:", reply)
+
+        # Speak reply
+        try:
+            text_to_speech_stream(reply)
         except Exception as e:
-            print("⚠️ Error:", e)
+            print("TTS error:", e)
 
 
 if __name__ == "__main__":
-    main()
+    run_voice_assistant()
