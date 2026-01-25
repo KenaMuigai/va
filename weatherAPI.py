@@ -12,9 +12,6 @@ class WeatherAPI:
         self.timeout = timeout
 
     def get_forecast(self, place: str) -> dict:
-        """
-        Fetch raw weather forecast data as a dictionary.
-        """
         try:
             response = requests.post(
                 self.base_url,
@@ -31,9 +28,6 @@ class WeatherAPI:
             raise WeatherAPIError("Invalid JSON response from API")
 
     def get_forecast_day(self, place: str, day: str) -> dict:
-        """
-        Fetch raw weather forecast data as a dictionary.
-        """
         data = self.get_forecast(place)
         target_day = day.lower()
 
@@ -46,10 +40,9 @@ class WeatherAPI:
                     "weather": entry.get("weather"),
                 }
 
+        return {"error": "Day not found"}
+
     def get_forecast_text(self, place: str) -> str:
-        """
-        Fetch weather forecast and return it as formatted text.
-        """
         data = self.get_forecast(place)
 
         lines = [f"Weather forecast for {data.get('place', place)}:"]
@@ -68,4 +61,3 @@ class WeatherAPI:
             )
 
         return "\n".join(lines)
-

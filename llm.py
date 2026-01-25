@@ -18,10 +18,6 @@ Rules:
 - If you don't know the answer, say "I don't know" and do NOT hallucinate.
 """
 
-# -----------------------------
-# Utility functions
-# -----------------------------
-
 def normalize(text: str) -> str:
     return text.lower().strip()
 
@@ -46,7 +42,8 @@ def needs_context(text: str) -> bool:
     return any(k in normalize(text) for k in keywords)
 
 def is_list_request(text: str) -> bool:
-    return "list" in normalize(text) or "bullet" in normalize(text) or "suggestions as a list" in normalize(text)
+    text = normalize(text)
+    return any(k in text for k in ["list", "bullet", "top 5", "top 10", "suggestions"])
 
 def is_comparison_question(text: str) -> bool:
     return any(k in normalize(text) for k in [
@@ -58,10 +55,6 @@ def is_confirmation(text: str) -> bool:
 
 def is_rejection(text: str) -> bool:
     return normalize(text) in {"no", "nope", "don't", "do not", "forget it"}
-
-# -----------------------------
-# Time / timezone utilities
-# -----------------------------
 
 TIMEZONE_MAP = {
     "germany": "Europe/Berlin",
@@ -83,10 +76,6 @@ def get_local_time(timezone_str: str) -> str:
     now = datetime.now(tz)
     return now.strftime("%I:%M %p")
 
-# -----------------------------
-# LLM Class
-# -----------------------------
-
 class LLM:
     def __init__(
         self,
@@ -104,14 +93,9 @@ class LLM:
         self.facts: Dict = {}
         self.pending_fact: Optional[Dict] = None
 
-        # store last list output
         self.last_list: Optional[List[str]] = None
 
         self._load_memory()
-
-    # -----------------------------
-    # Memory handling
-    # -----------------------------
 
     def _load_memory(self):
         if os.path.exists(self.history_file):
@@ -145,14 +129,9 @@ class LLM:
         exchanges = exchanges[-self.max_exchanges:]
         self.history = [m for pair in exchanges for m in pair]
 
-    # -----------------------------
-    # Core generation
-    # -----------------------------
-
     def generate(self, user_text: str) -> str:
         user_norm = normalize(user_text)
 
-        # ---- Handle pending fact confirmation ----
         if self.pending_fact:
             if is_confirmation(user_text):
                 key = self.pending_fact["key"]
@@ -170,7 +149,6 @@ class LLM:
                 self._append_exchange(user_text, reply)
                 return reply
 
-        # ---- Name (auto-store) ----
         name = extract_name(user_text)
         if name:
             self.facts["name"] = name
@@ -179,7 +157,6 @@ class LLM:
             self._append_exchange(user_text, reply)
             return reply
 
-        # ---- Location (confirm before storing) ----
         location = extract_location(user_text)
         if location:
             self.pending_fact = {"key": "location", "value": location}
@@ -187,33 +164,29 @@ class LLM:
             self._append_exchange(user_text, reply)
             return reply
 
-        # ---- Time queries (deterministic) ----
         if "time" in user_norm:
-            if "in germany" in user_norm or "in berlin" in user_norm:
-                tz = get_timezone_for_location("germany")
-                return f"The current time in Germany is {get_local_time(tz)}."
-
+            if "in " in user_norm:
+                loc = user_norm.split("in ")[-1].strip()
+                tz = get_timezone_for_location(loc)
+                if tz:
+                    return f"The current time in {loc.capitalize()} is {get_local_time(tz)}."
             if "location" in self.facts:
                 tz = get_timezone_for_location(self.facts["location"])
                 if tz:
                     return f"The current time in {self.facts['location']} is {get_local_time(tz)}."
-
             return "I don't know your location yet. Please tell me where you live."
 
-        # ---- Fact queries ----
         if "my name" in user_norm:
-            return f"Your name is {self.facts['name']}." if "name" in self.facts else "I don't know your name yet."
+            return f"Your name is {self.facts.get('name', 'unknown')}."
 
         if "where do i live" in user_norm:
-            return f"You live in {self.facts['location']}." if "location" in self.facts else "I don't know where you live yet."
+            return f"You live in {self.facts.get('location', 'unknown')}."
 
-        # ---- Build LLM input ----
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         if needs_context(user_text):
             messages.extend(self.history)
         messages.append({"role": "user", "content": user_text})
 
-        # ---- If user asks comparison, inject last list ----
         if is_comparison_question(user_text) and self.last_list:
             list_text = "\n".join([f"{i+1}. {item}" for i, item in enumerate(self.last_list)])
             messages.append({
@@ -227,11 +200,9 @@ class LLM:
                 )
             })
 
-        # If user requests list, force it
         if is_list_request(user_text):
             messages.append({"role": "user", "content": "Please respond ONLY in list format."})
 
-        # ---- Call Ollama safely ----
         try:
             response = ollama.chat(model=self.model, messages=messages)
             assistant_text = response["message"]["content"].strip()
@@ -241,7 +212,6 @@ class LLM:
             print(f"[LLM ERROR] {e}")
             return "Sorry, I'm having trouble responding right now. Please try again."
 
-        # ---- Save last list if asked ----
         if is_list_request(user_text):
             items = [line.strip() for line in assistant_text.splitlines() if line.strip()]
             if len(items) >= 2:
@@ -263,9 +233,6 @@ class LLM:
         self.last_list = None
         self._save_memory()
 
-# -----------------------------
-# CLI Test
-# -----------------------------
 
 if __name__ == "__main__":
     llm = LLM()

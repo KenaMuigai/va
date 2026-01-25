@@ -4,10 +4,6 @@ from CalendarAPI import CalendarAPI
 from ASR import listen_once
 from TTS import text_to_speech_stream
 
-import threading
-
-
-# Initialize modules
 llm = LLM()
 weather_api = WeatherAPI()
 calendar_api = CalendarAPI()
@@ -24,7 +20,7 @@ def is_calendar_query(text: str) -> bool:
 
 
 def handle_weather(text: str) -> str:
-    place = llm.facts.get("location", "Marburg")  # fallback
+    place = llm.facts.get("location", "Marburg")
     return weather_api.get_forecast_text(place)
 
 
@@ -52,18 +48,14 @@ def handle_calendar(text: str) -> str:
 
 def run_voice_assistant():
     print("Voice assistant running. Say something... (or type 'exit')")
+
     while True:
-        print("\nListening...")
-        try:
-            user_text = listen_once()
-        except Exception as e:
-            print("ASR error:", e)
+        user_text = listen_once()
+        if not user_text:
             continue
 
         if user_text.lower() in {"exit", "quit"}:
             break
-
-        print("You said:", user_text)
 
         if user_text.lower() == "/reset":
             llm.reset_memory()
@@ -77,7 +69,6 @@ def run_voice_assistant():
 
         print("Assistant:", reply)
 
-        # Speak reply
         try:
             text_to_speech_stream(reply)
         except Exception as e:
