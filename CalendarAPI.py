@@ -99,3 +99,8 @@ class CalendarAPI:
             lines.append("-" * 40)
 
         return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    api = CalendarAPI()
+    print(api.list_events())
