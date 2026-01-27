@@ -1,0 +1,15 @@
+FROM python:3.13-slim
+
+WORKDIR /Virtual-Assistant.Pipeline
+
+RUN apt-get update && apt-get install -y portaudio19-dev
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /Virtual-Assistant.Pipeline
+
+ENTRYPOINT ["python", "/Virtual-Assistant.Pipeline/main.py"]
+
+CMD ["python", "/Virtual-Assistant.Pipeline/main.py" ]
