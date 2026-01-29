@@ -1,17 +1,14 @@
 import requests
 
-
 class CalendarAPIError(Exception):
-    """Custom exception for Calendar API errors."""
     pass
-
 
 class CalendarAPI:
     def __init__(self, base_url="https://api.responsible-nlp.net/calendar.php", timeout=10, calenderid=54):
         self.base_url = base_url
         self.timeout = timeout
+        self.calenderid = calenderid  # API expects "calenderid"
         self.headers = {"Content-Type": "application/json"}
-        self.calenderid = calenderid  # Corrected parameter name
 
     def _handle_response(self, response):
         try:
@@ -22,14 +19,11 @@ class CalendarAPI:
         except requests.RequestException as e:
             raise CalendarAPIError(f"Request failed: {e}")
         except ValueError:
-            raise CalendarAPIError("Invalid JSON response from API")
+            raise CalendarAPIError("Invalid JSON response")
 
-    # ---------------------------
-    # CRUD METHODS
-    # ---------------------------
-    def create_event(self, title, description, start_time, end_time, location) -> dict:
+    # -------------------- CREATE EVENT --------------------
+    def create_event(self, title, description, start_time, end_time, location):
         payload = {
-            "calenderid": self.calenderid,
             "title": title,
             "description": description,
             "start_time": start_time,
@@ -38,21 +32,29 @@ class CalendarAPI:
         }
         response = requests.post(
             self.base_url,
+            params={"calenderid": self.calenderid},  # pass as query param
             json=payload,
             headers=self.headers,
             timeout=self.timeout,
         )
         return self._handle_response(response)
 
-    def list_events(self) -> dict:
+    # -------------------- LIST EVENTS --------------------
+    def list_events(self):
         response = requests.get(
             self.base_url,
             params={"calenderid": self.calenderid},
             timeout=self.timeout,
         )
-        return self._handle_response(response)
+        data = self._handle_response(response)
+        if isinstance(data, dict) and "events" in data:
+            return data["events"]
+        if isinstance(data, list):
+            return [e for e in data if isinstance(e, dict)]
+        return []
 
-    def get_event(self, event_id: int) -> dict:
+    # -------------------- GET SINGLE EVENT --------------------
+    def get_event(self, event_id):
         response = requests.get(
             self.base_url,
             params={"calenderid": self.calenderid, "id": event_id},
@@ -60,7 +62,8 @@ class CalendarAPI:
         )
         return self._handle_response(response)
 
-    def update_event(self, event_id: int, **updates) -> dict:
+    # -------------------- UPDATE EVENT --------------------
+    def update_event(self, event_id, **updates):
         response = requests.put(
             self.base_url,
             params={"calenderid": self.calenderid, "id": event_id},
@@ -70,7 +73,8 @@ class CalendarAPI:
         )
         return self._handle_response(response)
 
-    def delete_event(self, event_id: int) -> dict:
+    # -------------------- DELETE EVENT --------------------
+    def delete_event(self, event_id):
         response = requests.delete(
             self.base_url,
             params={"calenderid": self.calenderid, "id": event_id},
@@ -78,13 +82,10 @@ class CalendarAPI:
         )
         return self._handle_response(response)
 
-    # ---------------------------
-    # HELPER METHODS
-    # ---------------------------
-    def event_to_text(self, event: dict) -> str:
-        if not event:
-            return "Event not found."
-
+    # -------------------- FORMAT EVENTS --------------------
+    def event_to_text(self, event):
+        if not isinstance(event, dict):
+            return "Invalid event."
         return (
             f"Event #{event.get('id', '?')}\n"
             f"Title: {event.get('title', 'N/A')}\n"
@@ -94,20 +95,12 @@ class CalendarAPI:
             f"Location: {event.get('location', 'N/A')}"
         )
 
-    def events_to_text(self, events) -> str:
+    def events_to_text(self, events):
         if not events:
             return "No calendar events found."
-
-        lines = ["Calendar events:", "-" * 40]
+        lines = ["Calendar events:", "-"*40]
         for event in events:
-            lines.append(self.event_to_text(event))
-            lines.append("-" * 40)
-
+            if isinstance(event, dict):
+                lines.append(self.event_to_text(event))
+                lines.append("-"*40)
         return "\n".join(lines)
-
-
-###### test #####
-
-if __name__ == "__main__":
-    api = CalendarAPI()
-    print(api.list_events())

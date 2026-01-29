@@ -4,7 +4,6 @@ import os
 import re
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-
 from weatherAPI import WeatherAPI
 from CalendarAPI import CalendarAPI
 
@@ -28,10 +27,8 @@ WEATHER_CONDITIONS = [
 
 MAX_CONTEXT_TURNS = 5  # Context expires after N turns
 
-
 def normalize(text: str) -> str:
     return text.lower().strip()
-
 
 def extract_location(text: str) -> Optional[str]:
     match = re.search(r"\bin\s+([A-Za-z\s]+)", text, re.IGNORECASE)
@@ -48,7 +45,6 @@ def extract_location(text: str) -> Optional[str]:
     )
     return loc.strip() or None
 
-
 def extract_day(text: str) -> Optional[str]:
     t = normalize(text)
     if "today" in t:
@@ -60,7 +56,6 @@ def extract_day(text: str) -> Optional[str]:
             return d
     return None
 
-
 def resolve_day(day: str) -> str:
     if day == "today":
         return datetime.now().strftime("%A").lower()
@@ -68,14 +63,12 @@ def resolve_day(day: str) -> str:
         return (datetime.now() + timedelta(days=1)).strftime("%A").lower()
     return day
 
-
 def extract_weather_condition(text: str) -> Optional[str]:
     t = normalize(text)
     for cond in WEATHER_CONDITIONS:
         if cond in t:
             return cond
     return None
-
 
 def condition_matches(requested: str, actual: str) -> bool:
     actual = normalize(actual)
@@ -94,37 +87,30 @@ def condition_matches(requested: str, actual: str) -> bool:
     }
     return any(k in actual for k in mapping.get(requested, []))
 
-
 def is_weather_query(text: str) -> bool:
     return any(k in normalize(text) for k in [
         "weather", "forecast", "rain", "snow", "sun",
         "cloud", "temperature", "temp", "clear"
     ])
 
-
 def is_temperature_query(text: str) -> bool:
     return any(k in normalize(text) for k in ["temperature", "temp"])
-
 
 def is_calendar_query(text: str) -> bool:
     return any(k in normalize(text) for k in [
         "calendar", "appointment", "meeting", "schedule", "event"
     ])
 
-
 def is_add_event(text: str) -> bool:
     return any(k in normalize(text) for k in [
-        "add", "create", "schedule", "set up", "new appointment"
+        "add", "create", "schedule", "set up", "new appointment", "event"
     ])
-
 
 def is_delete_event(text: str) -> bool:
     return any(k in normalize(text) for k in ["delete", "remove", "cancel"])
 
-
 def is_update_event(text: str) -> bool:
     return any(k in normalize(text) for k in ["change", "update", "edit"])
-
 
 class LLM:
     def __init__(
@@ -205,6 +191,44 @@ class LLM:
         return self.last_weather_context.get("place"), self.last_weather_context.get("day")
 
     # --------------------
+    # CALENDAR PARSING HELPERS
+    # --------------------
+    def _parse_date_from_text(self, text: str) -> Optional[datetime]:
+        """Extract date from user text like '6th February' or '6 Feb'"""
+        match = re.search(
+            r"(\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|march|april|may|june|july|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december))",
+            text,
+            re.IGNORECASE
+        )
+        if match:
+            date_str = match.group(1)
+            date_str_clean = re.sub(r"(st|nd|rd|th)", "", date_str, flags=re.IGNORECASE).strip()
+            try:
+                return datetime.strptime(date_str_clean + f" {datetime.now().year}", "%d %B %Y")
+            except ValueError:
+                try:
+                    return datetime.strptime(date_str_clean + f" {datetime.now().year}", "%d %b %Y")
+                except ValueError:
+                    return None
+        return None
+
+    def _extract_title_from_text(self, text: str) -> str:
+        """Extract title by removing date and keywords"""
+        text_clean = text.lower()
+        # Remove keywords
+        text_clean = re.sub(r"\b(create|add|schedule|set up|event|appointment|titled|title|for)\b", "", text_clean)
+        # Remove the date substring
+        date_match = re.search(
+            r"(\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|march|april|may|june|july|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december))",
+            text_clean,
+            re.IGNORECASE
+        )
+        if date_match:
+            text_clean = text_clean.replace(date_match.group(0), "")
+        # Clean extra spaces
+        return text_clean.strip().title() or "Untitled"
+
+    # --------------------
     # GENERATE FUNCTION
     # --------------------
     def generate(self, user_text: str) -> str:
@@ -224,7 +248,6 @@ class LLM:
             place = extract_location(user_text)
             day_key = extract_day(user_text)
 
-            # Use last context if missing
             if not place or not day_key:
                 last_place, last_day = self._get_weather_context()
                 place = place or last_place or "Marburg"
@@ -242,7 +265,6 @@ class LLM:
             tmax = forecast["temperature"]["max"]
 
             requested_condition = extract_weather_condition(user_text)
-
             if requested_condition:
                 yesno = "Yes" if condition_matches(requested_condition, weather) else "No"
                 return (
@@ -263,42 +285,72 @@ class LLM:
         if is_calendar_query(user_text):
             events = self.calendar_api.list_events() or []
 
-            # NEXT event
-            if "next" in user_norm:
-                if not events:
-                    return "You have no upcoming events."
-                return self.calendar_api.event_to_text(events[0])
+            # REMOVE expired events
+            now = datetime.now()
+            upcoming = []
+            for e in events:
+                try:
+                    end_time = e.get("end_time")
+                    if end_time.endswith("Z"):
+                        dt = datetime.fromisoformat(end_time.replace("Z","+00:00")).astimezone()
+                    else:
+                        dt = datetime.fromisoformat(end_time)
+                    if dt >= now:
+                        upcoming.append(e)
+                    else:
+                        self.calendar_api.delete_event(e["id"])
+                except Exception:
+                    upcoming.append(e)
+            events = upcoming
 
+            # --------------------
             # ADD event
+            # --------------------
             if is_add_event(user_text):
-                title = re.search(r"title(?:d)?\s+([A-Za-z0-9\s]+)", user_text, re.IGNORECASE)
-                date = re.search(r"(\d{1,2}(?:th|st|nd|rd)?\s+of\s+[A-Za-z]+)", user_text, re.IGNORECASE)
+                title = self._extract_title_from_text(user_text)
+                date_obj = self._parse_date_from_text(user_text)
+                start_time = date_obj.isoformat() if date_obj else datetime.now().isoformat()
+                end_time = (date_obj + timedelta(hours=1)).isoformat() if date_obj else (datetime.now() + timedelta(hours=1)).isoformat()
 
                 event = self.calendar_api.create_event(
-                    title=title.group(1).strip() if title else "Untitled",
+                    title=title,
                     description="Created via assistant",
-                    start_time=(date.group(1) if date else "2025-01-12") + " 10:00",
-                    end_time=(date.group(1) if date else "2025-01-12") + " 11:00",
-                    location=self.facts.get("location", "Marburg"),
+                    start_time=start_time,
+                    end_time=end_time,
+                    location=self.facts.get("location", "Marburg")
                 )
                 self.last_calendar_event_id = event.get("id")
                 self.last_calendar_turn = len(self.history)//2
-                return f"Created event: {event.get('title', 'Untitled')}"
+                return f"Created appointment: {title}."
 
+            # --------------------
             # DELETE event
+            # --------------------
             if is_delete_event(user_text):
-                if self.last_calendar_event_id:
+                # Check if user mentions a title
+                title_match = re.search(r"titled\s+'?\"?([A-Za-z0-9\s]+)'?\"?", user_text, re.IGNORECASE)
+                if title_match:
+                    title_to_delete = title_match.group(1).strip().lower()
+                    deleted = False
+                    for e in events:
+                        if e.get("title","").lower() == title_to_delete:
+                            self.calendar_api.delete_event(e["id"])
+                            deleted = True
+                            break
+                    if deleted:
+                        return f"Deleted appointment titled '{title_to_delete}'."
+                    else:
+                        return f"No appointment found with title '{title_to_delete}'."
+                elif self.last_calendar_event_id:
                     self.calendar_api.delete_event(self.last_calendar_event_id)
                     self.last_calendar_event_id = None
-                    self.last_calendar_turn = len(self.history)//2
                     return "Deleted the previously created appointment."
-                elif events:
-                    self.calendar_api.delete_event(events[-1]["id"])
-                    return "Deleted the last event."
                 else:
                     return "You have no events to delete."
 
+            # --------------------
             # UPDATE event
+            # --------------------
             if is_update_event(user_text):
                 if self.last_calendar_event_id:
                     new_loc = extract_location(user_text) or "Marburg"
@@ -311,7 +363,20 @@ class LLM:
                 else:
                     return "You have no events to update."
 
-            return "I can help with calendar events."
+            # --------------------
+            # LIST events
+            # --------------------
+            if "today" in user_text.lower():
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                today_events = [e for e in events if e.get("start_time","").startswith(today_str)]
+                if not today_events:
+                    return "No calendar events for today."
+                return "\n".join([f"You have an event '{e['title']}' on {datetime.fromisoformat(e['start_time']).strftime('%d %B')} at {e.get('location','TBA')}." for e in today_events])
+
+            # Show all upcoming
+            if not events:
+                return "No calendar events found."
+            return "\n".join([f"You have an event '{e['title']}' on {datetime.fromisoformat(e['start_time']).strftime('%d %B')} at {e.get('location','TBA')}." for e in events])
 
         # --------------------
         # FALLBACK

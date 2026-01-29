@@ -1,64 +1,36 @@
 from CalendarAPI import CalendarAPI
+from datetime import datetime, timedelta
 
-# Initialize the API
-api = CalendarAPI(calenderid=54)
+api = CalendarAPI()
 
-# --------------------
-# 1. Create an event
-# --------------------
-print("Creating a new event...")
+# 1. Create
 event = api.create_event(
-    title="Test Meeting",
-    description="This is a test event",
-    start_time="2026-01-29 10:00",
-    end_time="2026-01-29 11:00",
-    location="Berlin"
+    title="Exam",
+    description="Final exam",
+    start_time="2026-01-30T10:00:00Z",
+    end_time="2026-01-30T12:00:00Z",
+    location="Room 101"
 )
-print("Created event:")
-print(event)
-print("-" * 50)
+print("Created event:", event)
 
-# Get the ID of the new event
-event_id = event.get("id")
-
-# --------------------
-# 2. List all events
-# --------------------
-print("Listing all events...")
+# 2. List
 events = api.list_events()
-print(events)
-print("-" * 50)
+print("All events:", events)
 
-# --------------------
-# 3. Get a specific event by ID
-# --------------------
-if event_id:
-    print(f"Getting details of event ID {event_id}...")
-    event_detail = api.get_event(event_id)
-    print(event_detail)
-    print("-" * 50)
+# 3. Update
+if events:
+    eid = events[-1]['id']
+    updated = api.update_event(eid, location="Room 102")
+    print("Updated event:", updated)
 
-# --------------------
-# 4. Update the event
-# --------------------
-if event_id:
-    print(f"Updating event ID {event_id}...")
-    updated = api.update_event(event_id, title="Updated Test Meeting", location="Munich")
-    print(updated)
-    print("-" * 50)
+# 4. Get single
+single = api.get_event(eid)
+print("Single event:", single)
 
-# --------------------
-# 5. Delete the event
-# --------------------
-if event_id:
-    print(f"Deleting event ID {event_id}...")
-    deleted = api.delete_event(event_id)
-    print(deleted)
-    print("-" * 50)
+# 5. Delete
+deleted = api.delete_event(eid)
+print("Deleted event:", deleted)
 
-# --------------------
-# 6. Verify deletion
-# --------------------
-print("Listing all events after deletion...")
+# 6. List after deletion
 events_after = api.list_events()
-print(events_after)
+print("Events after deletion:", events_after)
