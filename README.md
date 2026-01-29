@@ -1,8 +1,7 @@
-# Virtual-Assistant-Pipeline
+# Virtual-Assistant-Pipeline (Eval)
 
-This repository contains a Python-based evaluation pipeline for intent recognition using a large language model (LLM) from Hugging Face. It is designed to be lightweight on GitHub, with heavy models downloaded at runtime.
+This repository contains a Python-based evaluation pipeline for intent recognition. It is designed to be lightweight on GitHub, with heavy models downloaded at runtime.
 
----
 
 ## 1. Requirements
 
@@ -10,57 +9,43 @@ This repository contains a Python-based evaluation pipeline for intent recogniti
 - Git  
 - Virtual environment (venv recommended)  
 
-Dependencies are listed in \`requirements.txt\`:
+Dependencies are listed in requirements.txt:
 
-\`\`\`
 torch>=2.2.0
 torchvision>=0.17.0
 numpy==1.26.0
 Pillow==10.2.0
 transformers>=4.45.0
-\`\`\`
-
-> These versions ensure compatibility between PyTorch and Hugging Face Transformers.
-
----
 
 ## 2. Setup
 
 ### Step 1: Clone the repository
 
-\`\`\`bash
+bash
 git clone https://github.com/sam88aalap/Virtual-Assistant-Pipeline.git
 cd Virtual-Assistant-Pipeline
-\`\`\`
 
 ### Step 2: Create a virtual environment
 
-\`\`\`bash
+bash
 python -m venv venv
-\`\`\`
 
 ### Step 3: Activate the virtual environment
 
 - **Windows PowerShell / Git Bash**:
 
-\`\`\`bash
+bash
 venv\Scripts\activate
-\`\`\`
 
 - **Linux / macOS**:
 
-\`\`\`bash
+bash
 source venv/bin/activate
-\`\`\`
 
 ### Step 4: Install dependencies
-
-\`\`\`bash
+bash
 pip install --upgrade pip
 pip install -r requirements.txt
-\`\`\`
-
----
 
 ## 3. Downloading Models
 
@@ -71,29 +56,22 @@ This repo uses Hugging Face models which are downloaded automatically at runtime
 
 Optionally, you can pre-download models:
 
-\`\`\`bash
+bash
 python download_models.py
-\`\`\`
-
----
 
 ## 4. Running Evaluation
 
 Run the intent evaluation script:
 
-\`\`\`bash
+bash
 python evaluation/evaluate_intent.py
-\`\`\`
 
 - Uses \`evaluation/intent_data.json\` as input.  
 - Output will be displayed in the console.  
 - Automatically uses GPU if available (\`DEVICE = "cuda"\`), otherwise CPU.
 
----
-
 ## 5. Repository Structure
 
-\`\`\`
 Virtual-Assistant-Pipeline/
 │
 ├─ download_models.py      # Script to pre-download models
