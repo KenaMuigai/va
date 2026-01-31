@@ -53,7 +53,7 @@ def run_voice_assistant():
         user_text = listen_once()
         #user_text = listen_once_mic()
         print("You: ", user_text)
-        if not user_text:
+        if not user_text:  
             continue
 
         if user_text.lower() in {"exit", "quit"}:
